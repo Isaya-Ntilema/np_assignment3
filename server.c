@@ -57,8 +57,6 @@ printf("user not found");
 }
 
 
-
-
 void *get_in_addr(struct sockaddr *sa)
 {
   if (sa->sa_family == AF_INET)
