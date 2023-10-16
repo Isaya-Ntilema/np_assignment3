@@ -112,12 +112,9 @@ printf("the USR0 %s\n",chatUsers[0].userName);
 printf("the USR2 %s\n",chatUsers[2].userName);
 
 
-
-//   char *nk  = findUserbySocketNo(i);
-//   printf("the NK is %s, %d\n",nk,i);
    char respo[20] ={0};
-  // strcpy (respo, nk);
-//   strcat (recv_buf , nk);
+
+	  
     printf("%s\n", recv_buf);
     for (j = 0; j <= fdmax; j++)
     {
@@ -155,12 +152,12 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  // Seperating IP and port
+  // Separating port and IP address
   char delim[] = ":";
   char *Desthost = strtok(argv[1], delim);
   char *Destport = strtok(NULL, delim);
 
-  /* Do magic chage string to int*/
+  /* Change string to int*/
   int port = atoi(Destport);
   printf("Host %s, and port %d.\n", Desthost, port);
 
@@ -192,7 +189,7 @@ int main(int argc, char *argv[])
       perror("setsockopt");
       exit(1);
     }
-    // Binding start
+    // Start binding
     if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1)
     {
       close(sockfd);
@@ -211,7 +208,7 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  // Listening start
+  // Start listening
   if (listen(sockfd, 5) == -1)
   {
     perror("listen");
