@@ -1,4 +1,3 @@
-
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -38,7 +37,6 @@ char *findUserbyPort(int port) // NOT REMOVED
   printf("user not found");
   return NULL;
 }
-
 
 
 char *findUserbySocketNo(int socketNo) // NOT REMOVED
