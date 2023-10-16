@@ -50,7 +50,6 @@ void send_recv(int i, int sockfd)
 }
 
 
-
 int main(int argc,char * argv[])
 {
 	int  fdmax, i;
@@ -71,9 +70,7 @@ int main(int argc,char * argv[])
         char buf[MAXDATASIZE];
         int numbytes;
 
-
-
-//   Check number of argument
+//   Checking the number of argument
 
   if (argc != 3)
   {
