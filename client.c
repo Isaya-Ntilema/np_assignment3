@@ -26,8 +26,6 @@ void *get_in_addr(struct sockaddr *sa)
 }
 
 
-
-
 void send_recv(int i, int sockfd)
 {
 	char send_buf[BUFSIZE];
