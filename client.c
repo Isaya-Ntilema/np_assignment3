@@ -10,15 +10,11 @@
 #include <netdb.h>
 #include <errno.h>
 
-
-
 #define DEBUG 1
 #define MAX_TOKEN 3
 #define MAX_RES_LEN 100
 #define MAXDATASIZE 1024
 #define BUFSIZE 1024
-
-
 
 void *get_in_addr(struct sockaddr *sa)
 {
