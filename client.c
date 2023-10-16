@@ -94,12 +94,12 @@ exit(0);
 }
 
 
-  // Seperating IP and port
+  // Separating port and IP address
   char delim[] = ":";
   char *Desthost = strtok(argv[1], delim);
   char *Destport = strtok(NULL, delim);
 
-  /* Do magic chage string to int*/
+  /* Converting string to int*/
   int port = atoi(Destport);
   printf("Host %s, and port %d.\n", Desthost, port);
   //Clearing hints
@@ -152,9 +152,7 @@ if ((numbytes = recv(sockfd, recvBuff, sizeof(recvBuff), 0)) == -1) {
           exit(1);
         }
 
-
 printf("client: received %s\n",recvBuff);
-
 
 char *found_substr = strstr(recvBuff, supported_prot);
 
@@ -165,7 +163,6 @@ printf("the protocol is supported\n");
 char respo[1024];
 strcpy (respo,"NICK ");
 strcat (respo, argv[2]) ;
-
 
 if (numbytes = send(sockfd,respo,sizeof(respo),0) == -1) {
             perror("sendto:");
@@ -181,8 +178,6 @@ if ((numbytes = recv(sockfd, recvBuff, sizeof(recvBuff), 0)) == -1) {
         }
 
 printf("client: received %s \n",recvBuff);
-
-
 
 
 }else
