@@ -35,6 +35,7 @@ char *findUserbyPort(int port) // NOT REMOVED
         return user.userName;
   }
   printf("user not found");
+  fflush(stdout);
   return NULL;
 }
 
@@ -44,15 +45,18 @@ char *findUserbySocketNo(int socketNo) // NOT REMOVED
   for (int i = 0; i < 10; i++)
   {
    printf("the USR0 %s",chatUsers[0].userName);
-  printf("the USR1 %s",chatUsers[1].userName);
-printf("the USR2 %s",chatUsers[2].userName);
+   printf("the USR1 %s",chatUsers[1].userName);
+   printf("the USR2 %s",chatUsers[2].userName);
+   fflush(stdout);
     struct ChatUser user = chatUsers[i];
     if (user.socketNo == socketNo)
     //  if (user.removed != 1)
         printf("the found user is  %s",user.userName);
+	fflush(stdout);
         return user.userName;
   }
 printf("user not found");
+fflush(stdout);
   return NULL;
 }
 
@@ -87,7 +91,6 @@ void send_recv(int i, fd_set *master, int sockfd, int fdmax, char *usr)
   int nbytes_recvd, j;
   char recv_buf[BUFSIZE], buf[BUFSIZE];
   char str[2024];
-  //        printf("the user is %s",usr);
 
   memset(recv_buf, 0, sizeof(recv_buf));
   if ((nbytes_recvd = recv(i, recv_buf, BUFSIZE, 0)) <= 0)
@@ -95,6 +98,7 @@ void send_recv(int i, fd_set *master, int sockfd, int fdmax, char *usr)
     if (nbytes_recvd == 0)
     {
       printf("socket %d hung up\n", i);
+      fflush(stdout);
     }
     else
     {
@@ -106,16 +110,17 @@ void send_recv(int i, fd_set *master, int sockfd, int fdmax, char *usr)
   else
   {
    printf("the I is  %d\n",i);
+   fflush(stdout);
 
 printf("the USR0 %s\n",chatUsers[0].userName);
-  printf("the USR1 %s\n",chatUsers[1].userName);
+printf("the USR1 %s\n",chatUsers[1].userName);
 printf("the USR2 %s\n",chatUsers[2].userName);
-
+fflush(stdout);
 
    char respo[20] ={0};
-
-	  
+  
     printf("%s\n", recv_buf);
+    fflush(stdout);
     for (j = 0; j <= fdmax; j++)
     {
       send_to_all(j, i, sockfd, nbytes_recvd, recv_buf, master);
@@ -145,10 +150,11 @@ int main(int argc, char *argv[])
   char s[INET6_ADDRSTRLEN];
   int rv;
   char const *reply = "ERROR\n";
-  // Check number of argumnets
+  // Check number of arguments
   if (argc != 2)
   {
     fprintf(stderr, "usage: showip hostname\n");
+    fflush(stdout);
     return 1;
   }
 
@@ -160,6 +166,7 @@ int main(int argc, char *argv[])
   /* Change string to int*/
   int port = atoi(Destport);
   printf("Host %s, and port %d.\n", Desthost, port);
+  fflush(stdout);
 
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC;
@@ -170,6 +177,7 @@ int main(int argc, char *argv[])
   if ((rv = getaddrinfo(Desthost, Destport, &hints, &servinfo)) != 0)
   {
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+    fflush(stdout);
     return 1;
   }
 
@@ -205,6 +213,7 @@ int main(int argc, char *argv[])
   if (p == NULL)
   {
     fprintf(stderr, "server: failed to bind\n");
+    fflush(stdout);
     exit(1);
   }
 
@@ -255,6 +264,7 @@ int main(int argc, char *argv[])
           {
 
             printf("new connection from %s on port %d \n", inet_ntoa(their_addr.sin_addr), ntohs(their_addr.sin_port));
+	    fflush(stdout);
 
             memset(sendBuff, 0, sizeof(sendBuff));
             // Sending supported protocol
@@ -271,7 +281,7 @@ int main(int argc, char *argv[])
             if (recv(newsockfd, recvBuff, sizeof(recvBuff), 0) < 0)
             {
               perror("recv");
-              /* close socket */
+              /* closing socket */
               exit(1);
             }
 
@@ -282,6 +292,7 @@ int main(int argc, char *argv[])
             char *name = strtok(NULL, delim);
 
             printf("%s new user  is comming , k=  %d\n", name, k);
+	    fflush(stdout);
 
            chatUsers[k].userName = name ;
            chatUsers[k].socketNo = newsockfd;
@@ -289,6 +300,7 @@ int main(int argc, char *argv[])
            chatUsers[k].removed = 0;
            
            printf("The username is %s %d %d %d\n ",chatUsers[k].userName, chatUsers[k].socketNo,chatUsers[k].port,k);
+	   fflush(stdout);
 	   k++;
             memset(sendBuff, 0, sizeof(sendBuff));
             strcpy(sendBuff, "OK\n");
@@ -312,7 +324,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-          //   printf("the I2 is %d\n",i);
+          // 
           send_recv(i, &master, sockfd, fdmax, usr);
         }
       }
