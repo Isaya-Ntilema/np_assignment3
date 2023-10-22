@@ -75,21 +75,23 @@ int main(int argc,char * argv[])
   if (argc != 3)
   {
     fprintf(stderr, "usage: showip hostname\n");
+    fflush(stdout);
     return 1;
   }
 
 
 char const *name = argv[2];
 printf("the name is %s\n",name);
+fflush(stdout);
 int count;
 for(int i = 0; i < strlen(name); i++) {
         if(name[i] != ' ')
             count++;
     }
 
-//printf("Total number of characters in a string: %d", count); 
 if (count > 12){ 
 printf("The name  must be lower that 12\n");
+fflush(stdout);
 exit(0);
 }
 
@@ -102,6 +104,7 @@ exit(0);
   /* Converting string to int*/
   int port = atoi(Destport);
   printf("Host %s, and port %d.\n", Desthost, port);
+  fflush(stdout);
   //Clearing hints
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC; // AF_INET or AF_INET6 to force version
@@ -112,6 +115,7 @@ if ((status = getaddrinfo(Desthost, Destport, &hints, &res)) != 0)
   {
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
     printf("status %d", status);
+    fflush(stdout);
     return 2;
   }
 for (p = res; p != NULL; p = p->ai_next)
@@ -128,6 +132,7 @@ for (p = res; p != NULL; p = p->ai_next)
 
 if (p == NULL) {
                 fprintf(stderr, "talker: failed to create socket\n");
+	        fflush(stdout);
                 return 2;
                }
 
@@ -137,13 +142,14 @@ memcpy(&serv_addr, res->ai_addr, sizeof(serv_addr));
 
 if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
   {
-    printf("\n Error : Connect Failed \n");
+    printf("\n Error : Connecting Failed \n");
+    fflush(stdout);
     return 1;
   }
 
 inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
                   s, sizeof s);
-//        printf("client: connecting to %s\n", s);
+
 
 memset(recvBuff, 0, sizeof(recvBuff));
 
@@ -153,13 +159,14 @@ if ((numbytes = recv(sockfd, recvBuff, sizeof(recvBuff), 0)) == -1) {
         }
 
 printf("client: received %s\n",recvBuff);
+fflush(stdout);
 
 char *found_substr = strstr(recvBuff, supported_prot);
 
-//if (!strcmp(recvBuff, "Hello 1"))
 if (found_substr != NULL)
 {
 printf("the protocol is supported\n");
+fflush(stdout);
 char respo[1024];
 strcpy (respo,"NICK ");
 strcat (respo, argv[2]) ;
@@ -178,11 +185,12 @@ if ((numbytes = recv(sockfd, recvBuff, sizeof(recvBuff), 0)) == -1) {
         }
 
 printf("client: received %s \n",recvBuff);
-
+fflush(stdout);
 
 }else
 {
 printf("it is not ok\n");
+fflush(stdout);
 }
 
 	FD_ZERO(&master);
@@ -203,6 +211,7 @@ printf("it is not ok\n");
 				send_recv(i, sockfd);
 	}
 	printf("client-quited\n");
+	fflush(stdout);
 	close(sockfd);
 	return 0;
 }
