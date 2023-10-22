@@ -9,10 +9,8 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <regex.h>
-
 #include <netdb.h>
 #include <strings.h> 
-
 #define LENGTH 2048
 #define LENGTH2 12
 #define DEBUG
