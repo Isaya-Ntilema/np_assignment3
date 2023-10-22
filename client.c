@@ -124,6 +124,7 @@ for (p = res; p != NULL; p = p->ai_next)
     if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
     {
       perror("socket");
+      fflush(stderr);
       continue;
     }
 
@@ -155,6 +156,7 @@ memset(recvBuff, 0, sizeof(recvBuff));
 
 if ((numbytes = recv(sockfd, recvBuff, sizeof(recvBuff), 0)) == -1) {
           perror("recv");
+	  fflush(stderr);
           exit(1);
         }
 
@@ -173,6 +175,7 @@ strcat (respo, argv[2]) ;
 
 if (numbytes = send(sockfd,respo,sizeof(respo),0) == -1) {
             perror("sendto:");
+	    fflush(stderr);
             exit(1);
        }
 
@@ -181,6 +184,7 @@ memset(recvBuff, 0, sizeof(recvBuff));
 
 if ((numbytes = recv(sockfd, recvBuff, sizeof(recvBuff), 0)) == -1) {
           perror("recv");
+	  fflush(stderr);
           exit(1);
         }
 
@@ -203,6 +207,7 @@ fflush(stdout);
 		read_fds = master;
 		if(select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1){
 			perror("select");
+			fflush(stderr);
 			exit(4);
 		}
 
