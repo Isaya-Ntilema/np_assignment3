@@ -1,222 +1,324 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
+#include <signal.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <unistd.h>
-#include <errno.h>
+#include <pthread.h>
+#include <regex.h>
+
 #include <netdb.h>
-#include <errno.h>
+#include <strings.h> 
 
-#define DEBUG 1
-#define MAX_TOKEN 3
-#define MAX_RES_LEN 100
-#define MAXDATASIZE 1024
-#define BUFSIZE 1024
+#define LENGTH 2048
+#define LENGTH2 12
+#define DEBUG
 
-void *get_in_addr(struct sockaddr *sa)
+//Initializing global variables
+volatile sig_atomic_t flag = 0;
+int sockfd = 0;
+char name[32];
+char username[2048];
+ 
+void Overwrite_STDOUT() 
 {
-    if (sa->sa_family == AF_INET) {
-        return &(((struct sockaddr_in*)sa)->sin_addr);
-    }
-
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
-
-
-void send_recv(int i, int sockfd)
-{
-	char send_buf[BUFSIZE];
-	char recv_buf[BUFSIZE];
-	int nbyte_recvd;
-        char str[1024];
-
-	if (i == 0){
-		fgets(send_buf, BUFSIZE, stdin);
-                strcpy (str,"MSG ");
-                strcat (str, send_buf) ;
-		if (strcmp(send_buf , "quit\n") == 0) {
-			exit(0);
-		}else
-			send(sockfd, str, strlen(str), 0);
-	}else {
-		nbyte_recvd = recv(sockfd, recv_buf, BUFSIZE, 0);
-		recv_buf[nbyte_recvd] = 0;
-		printf("%s\n" , recv_buf);
-		fflush(stdout);
-	}
-}
-
-
-int main(int argc,char * argv[])
-{
-	int  fdmax, i;
-	struct sockaddr_in server_addr;
-	fd_set master;
-	fd_set read_fds;
-        int sockfd = 0, n = 0;
-        char recvBuff[1024];
-        struct addrinfo serv_addr;
-        char const *supported_prot = "1";
-        char result[MAX_RES_LEN];
-        struct addrinfo hints, *res, *p;
-        struct sockaddr_in sin;
-        socklen_t len;
-        int status;
-        char myIP[16];
-        char s[INET6_ADDRSTRLEN];
-        char buf[MAXDATASIZE];
-        int numbytes;
-
-//   Checking the number of argument
-
-  if (argc != 3)
-  {
-    fprintf(stderr, "usage: showip hostname\n");
-    fflush(stdout);
-    return 1;
-  }
-
-
-char const *name = argv[2];
-printf("the name is %s\n",name);
-fflush(stdout);
-int count;
-for(int i = 0; i < strlen(name); i++) {
-        if(name[i] != ' ')
-            count++;
-    }
-
-if (count > 12){ 
-printf("The name  must be lower that 12\n");
-fflush(stdout);
-exit(0);
-}
-
-
-  // Separating port and IP address
-  char delim[] = ":";
-  char *Desthost = strtok(argv[1], delim);
-  char *Destport = strtok(NULL, delim);
-
-  /* Converting string to int*/
-  int port = atoi(Destport);
-  printf("Host %s, and port %d.\n", Desthost, port);
   fflush(stdout);
-  //Clearing hints
-  memset(&hints, 0, sizeof hints);
-  hints.ai_family = AF_UNSPEC; // AF_INET or AF_INET6 to force version
-  hints.ai_socktype = SOCK_STREAM;
+}
+ 
+//sending out messages of not more than 256 characters
+void Send_Message() 
+{
+  char message[2048] = {};
+	char buffer[LENGTH + 32] = {};
 
-
-if ((status = getaddrinfo(Desthost, Destport, &hints, &res)) != 0)
+  while(1) 
   {
-    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
-    printf("status %d", status);
-    fflush(stdout);
-    return 2;
-  }
-for (p = res; p != NULL; p = p->ai_next)
-  {
-    /* Create the socket */
-    if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
+  Overwrite_STDOUT();
+  fgets(message, LENGTH, stdin);
+  //check the message content and count the characters
+  int charnum = strlen(message)-1;
+    //The message should not exceed 256 
+    if (charnum>255) 
     {
-      perror("socket");
-      fflush(stderr);
-      continue;
+      printf("Maximum charachters reached you have:%d. resent shorter message\n",charnum);
+      fflush(stdout);
     }
-
-   break;
+    else
+    {
+        //check protocol and send protocol to the server
+        char Protocol_Msg[LENGTH]="MSG ";
+        strcat(Protocol_Msg,message);
+        strcat(Protocol_Msg,"\n");
+        send(sockfd, Protocol_Msg, strlen(Protocol_Msg), 0);
+        //clearing buffer
+        bzero(message, LENGTH);
+        bzero(buffer, LENGTH + 32);
+    }
   }
 
-if (p == NULL) {
-                fprintf(stderr, "talker: failed to create socket\n");
-	        fflush(stdout);
-                return 2;
-               }
-
-  freeaddrinfo(res);
-
-memcpy(&serv_addr, res->ai_addr, sizeof(serv_addr));
-
-if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-  {
-    printf("\n Error : Connecting Failed \n");
-    fflush(stdout);
-    return 1;
-  }
-
-inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
-                  s, sizeof s);
-
-
-memset(recvBuff, 0, sizeof(recvBuff));
-
-if ((numbytes = recv(sockfd, recvBuff, sizeof(recvBuff), 0)) == -1) {
-          perror("recv");
-	  fflush(stderr);
-          exit(1);
-        }
-
-printf("client: received %s\n",recvBuff);
-fflush(stdout);
-
-char *found_substr = strstr(recvBuff, supported_prot);
-
-if (found_substr != NULL)
-{
-printf("the protocol is supported\n");
-fflush(stdout);
-char respo[1024];
-strcpy (respo,"NICK ");
-strcat (respo, argv[2]) ;
-
-if (numbytes = send(sockfd,respo,sizeof(respo),0) == -1) {
-            perror("sendto:");
-	    fflush(stderr);
-            exit(1);
-       }
-
-
-memset(recvBuff, 0, sizeof(recvBuff));
-
-if ((numbytes = recv(sockfd, recvBuff, sizeof(recvBuff), 0)) == -1) {
-          perror("recv");
-	  fflush(stderr);
-          exit(1);
-        }
-
-printf("client: received %s \n",recvBuff);
-fflush(stdout);
-
-}else
-{
-printf("it is not ok\n");
-fflush(stdout);
 }
 
-	FD_ZERO(&master);
-        FD_ZERO(&read_fds);
-        FD_SET(0, &master);
-        FD_SET(sockfd, &master);
-	fdmax = sockfd;
+// Receiving messages from server and splitting message into lines
 
-	while(1){
-		read_fds = master;
-		if(select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1){
-			perror("select");
-			fflush(stderr);
-			exit(4);
-		}
+void Recv_Message()
+{
+    char message[LENGTH] = {};
+    
+    while (1) 
+    {
+        // Receiving message from the server
+        int receive = recv(sockfd, message, LENGTH, 0);
+              //working on the protocol, username and message 
+        char get_Protocol[LENGTH];
+        char getUserName[LENGTH];
+        char getMessage[LENGTH];
 
-		for(i=0; i <= fdmax; i++ )
-			if(FD_ISSET(i, &read_fds))
-				send_recv(i, sockfd);
+        if (receive > 0) 
+        {
+            char *line = strtok(message, "\n"); // Split message into lines
+
+            while (line != NULL) 
+            {
+                // Process each line
+                int rv = sscanf(line, "%s %s %[^\n]", get_Protocol, getUserName, getMessage);
+                char dest[LENGTH] = {0};
+                memcpy(dest, getMessage, sizeof(getMessage));
+
+                // Check the message prefix and compare it with the username
+                if (strcmp(get_Protocol, "MSG") == 0) 
+                {
+                    if (strcmp(getUserName, username) != 0) 
+                    {
+                        printf("%s\n", dest); // Print each line
+                        fflush(stdout);
+                    }
+                }
+
+                // Get the next line
+                line = strtok(NULL, "\n");
+            }
+        } else if (receive == 0) 
+        {
+            break;
+        }
+
+        memset(message, 0, sizeof(message));
+    }
+}
+
+//main function 
+int main(int argc, char *argv[])
+{
+//check CLI arguments 
+	if (argc != 3) 
+    {
+        printf("Please provide exactly three arguments: IP:Port and a nickname/number.\n");
+        fflush(stdout);
+        exit(1); // Exit with a non-zero status code to indicate an error.
+    } 
+    else 
+    {
+        char *ipPortArg = argv[1];
+        char *colon = strchr(ipPortArg, ':');
+        if (colon == NULL) 
+        {
+            printf("Error: IP and Port must be separated by a colon (e.g., 127.0.0.1:8080).\n");
+            fflush(stdout);
+            exit(1); // Exit with an error status code.
+        }
+    }
+
+// checking the  nicknames
+  char *expression="^[A-Za-z0-9_]+$", *org ;
+   regex_t regularexpression;
+  int reti;
+  int matches;
+  regmatch_t items;
+
+  reti=regcomp(&regularexpression, expression,REG_EXTENDED);
+  if(reti)
+  {
+    printf("Could not compile regex.\n");
+    fflush(stdout);
+    exit(0);
+  }
+
+for (int i = 2; i < argc; i++) 
+{
+    if (strlen(argv[i]) <= 12) 
+    { 
+        reti = regexec(&regularexpression, argv[i], matches, &items, 0);
+        if (!reti) 
+        {
+            // Clearing username, check for validity using regex
+            bzero(username, LENGTH);
+            strncpy(username, argv[i], LENGTH);
+            #ifdef DEBUG
+            printf("%s is valid User Name.\n", argv[i]);
+            fflush(stdout);
+            #endif
+        } else 
+        {
+            // Error if the username is not valid
+            printf("ERROR, %s is NOT valid User Name.\n", argv[i]);
+            fflush(stdout);
+            exit(1); // Exit with a non-zero status code to indicate an error
+        }
+    } else 
+    {
+        // The nickname should be less than or equal to 12 characters
+        printf(" ERROR %s is too long (%zu vs 12 chars).\n", argv[i], strlen(argv[i]));
+        fflush(stdout);
+        exit(1); // Exit with a non-zero status code to indicate an error
+    }
+}
+
+  regfree(&regularexpression);
+  free(org);
+
+//Declaration of variables 
+  char *hoststring,*portstring, *rest;
+  struct addrinfo hints;
+  struct addrinfo* res=0;
+
+//GET name and port from arguments
+  org=strdup(argv[1]);
+  rest=argv[1];
+  hoststring=strtok_r(rest,":",&rest);
+  portstring=strtok_r(rest,":",&rest);
+  int port=atoi(portstring);
+  printf("Connected to %s:%d \n",hoststring,port);
+  fflush(stdout);
+
+// get the address information from the server 
+	memset(&hints,0,sizeof(hints));
+	hints.ai_family=AF_UNSPEC;
+	hints.ai_socktype=SOCK_STREAM;
+	hints.ai_protocol=0;
+	hints.ai_flags=AI_ADDRCONFIG;
+	int err=getaddrinfo(hoststring,portstring,&hints,&res);
+	if (err!=0) 
+	{
+    printf("ERROR in getaddrinfo\n");
+    fflush(stdout);
+    exit(0);
 	}
-	printf("client-quited\n");
-	fflush(stdout);
-	close(sockfd);
-	return 0;
+// Creating the socket
+	sockfd=socket(res->ai_family,res->ai_socktype,res->ai_protocol);
+	if (sockfd==-1) 
+	{
+		printf("ERROR in socket creation\n");
+    fflush(stdout);
+		exit(0);
+	}
+// Connecting to server
+	if (connect(sockfd,res->ai_addr,res->ai_addrlen)==-1) 
+	{
+    printf("ERROR in SOCKET Connetion\n");
+    fflush(stdout);
+    exit(0);
+	}
+//Get the server Protocol
+  char Protocol[LENGTH];
+  bzero(Protocol, LENGTH);
+  int n = read(sockfd, Protocol, sizeof(Protocol));
+  if (n <= 0) 
+  {
+    perror("ERROR reading Server Protocol\n");
+    fflush(stderr);	
+    exit(0);	
+  }
+  printf("Serve Protocol: %s", Protocol);
+  fflush(stdout);
+//check the server protocol and proceed 
+  if (strcmp(Protocol,"HELLO 1\n")==0)
+  {
+    char NICProtocolMsg[LENGTH]="NICK ";
+    strcat(NICProtocolMsg,username);
+    strcat(NICProtocolMsg,"\n");
+    printf("sending NICK name to server:%s\n",NICProtocolMsg);
+    fflush(stdout);
+
+    #ifdef DEBUG
+    printf("Protocol Supported, Sending Nick Name to server\n");
+    fflush(stdout);
+    #endif
+
+    if(send(sockfd, NICProtocolMsg, strlen(NICProtocolMsg), 0)<=0)
+    {
+      perror("ERROR Sending UserName to server\n");
+      fflush(stderr);
+      exit(0);
+    }
+    else
+    {
+      char response[LENGTH]={0};
+      int n = read(sockfd, response, sizeof(response));
+      if (n <= 0) 
+      {
+        printf("ERROR reading Server response\n");	
+        fflush(stdout);
+        exit(0);	
+      }
+      else
+      {
+        #ifdef DEBUG
+	printf("Server message : %s\n",response);
+        fflush(stdout);
+			  #endif
+
+        if(strcmp(response,"OK\n")==0)
+        {
+            printf("NICKName Accepted \n",username);
+            fflush(stdout);
+        }
+        else
+        {
+            printf("ERROR, NICKName NOT Accepted  \n",username);
+            fflush(stdout);
+            exit(0);
+        }
+      }
+    }
+  }
+  else
+  {
+  printf("ERROR Server Protocl NOT support\n");
+  fflush(stdout);
+  exit(0);
+  }
+  
+  printf("WELCOME THE CHAT \n");
+  fflush(stdout);
+
+   pthread_t send_thread;
+  if(pthread_create(&send_thread, NULL, (void *) Send_Message, NULL) != 0)
+  {
+    printf("ERROR: pthread\n");
+    fflush(stdout);
+    return 1;
+	}
+
+   pthread_t receive_thread;
+  if(pthread_create(&receive_thread, NULL, (void *) Recv_Message, NULL) != 0)
+  {
+    printf("ERROR: check on the pthread\n");
+    fflush(stdout);
+    return 1;
+	}
+
+while (1)
+  {
+		if(flag)
+    {
+			printf("\n BYE BYE, EXITING \n");
+      fflush(stdout);
+			break;
+    }
+	}
+	    close(sockfd);
+  return 0;
 }
