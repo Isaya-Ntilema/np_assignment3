@@ -4,342 +4,377 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <errno.h>
 #include <string.h>
+#include <pthread.h>
 #include <sys/types.h>
-#include <time.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <ifaddrs.h>
+#include <unistd.h>
+#include <math.h>
 #include <netdb.h>
+#include <regex.h>
 
-#define BUFSIZE 1024
-#define MAX_USER 100
+#define MAX_CLIENTS 50
+#define maxbuffersize 2048
+// #define DEBUG
 
-struct ChatUser
+static _Atomic unsigned int cli_count = 0;
+static int uid = 10;
+int leave_flag = 0;
+
+// Client structure 
+typedef struct
 {
-  int socketNo;
-  int port;
-  char *userName;
-  int removed;
-};
+	struct sockaddr_in address;
+	int sockfd;
+	int uid;
+	char name[12];
+} client_t;
 
-struct ChatUser chatUsers[100] = {0};
-int lastUserIndex = 10;
+client_t *clients[MAX_CLIENTS];
+pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-
-char *findUserbyPort(int port) // NOT REMOVED
+// SECTION ==Add clients to the list to chat with others
+void queue_add(client_t *cl)
 {
-  for (int i = 0; i < 10; i++)
-  {
-    struct ChatUser user = chatUsers[i];
-    if (user.port == port)
-      if (user.removed != 1)
-        return user.userName;
-  }
-  printf("user not found");
-  fflush(stdout);
-  return NULL;
+	pthread_mutex_lock(&clients_mutex);
+
+	for(int i=0; i < MAX_CLIENTS; ++i)
+    {
+		if(!clients[i])
+        {
+			clients[i] = cl;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&clients_mutex);
 }
 
-
-char *findUserbySocketNo(int socketNo) // NOT REMOVED
+// SECTION ==Remove clients from the list after completing the chat
+void queue_remove(int uid)
 {
-  for (int i = 0; i < 10; i++)
-  {
-   printf("the USR0 %s",chatUsers[0].userName);
-   printf("the USR1 %s",chatUsers[1].userName);
-   printf("the USR2 %s",chatUsers[2].userName);
-   fflush(stdout);
-    struct ChatUser user = chatUsers[i];
-    if (user.socketNo == socketNo)
-    //  if (user.removed != 1)
-        printf("the found user is  %s",user.userName);
+	pthread_mutex_lock(&clients_mutex);
+	for(int i=0; i < MAX_CLIENTS; ++i)
+    {
+		if(clients[i])
+        {
+			if(clients[i]->uid == uid)
+            {
+				clients[i] = NULL;
+				break;
+			}
+		}
+	}
+	pthread_mutex_unlock(&clients_mutex);
+}
+
+//How to send messages to all clients, expect oneself
+void send_message(char *s, int uid)
+{
+	pthread_mutex_lock(&clients_mutex);
+	for(int i=0; i<MAX_CLIENTS; ++i)
+    {
+		if(clients[i])
+        {
+			if(clients[i]->uid != uid)
+            {
+				if(send(clients[i]->sockfd, s, strlen(s),0) <= 0)
+                {
+					printf("ERROR: writing to sockedfd  failed");
+					fflush(stdout);
+					break;
+				}
+			}
+		}
+	}
+	pthread_mutex_unlock(&clients_mutex);
+}
+
+// Function for handling all communications with the client 
+
+void *handle_client(void *arg)
+{
+	char mem1[maxbuffersize];
+	int leave_flag = 0;
+
+	cli_count++;
+	client_t *cli = (client_t *)arg;
+
+	while(1)
+    {
+		if (leave_flag) 
+        {
+			break;
+		}
+		int receive = recv(cli->sockfd, mem1, maxbuffersize, 0);
+		if (receive > 0)
+        {
+			if(strlen(mem1) > 0)
+            {
+				char message [maxbuffersize]={0};
+				char out_message [maxbuffersize]={0};
+				char mem1_out [maxbuffersize]={0};
+				
+				memcpy(message,mem1+3,sizeof(mem1));
+				message[strcspn(message, "\n")] = '\0';
+
+				memcpy(mem1_out,mem1+3,sizeof(mem1));
+				//check the ending creterion , either a \n or a space \r
+	
+					if (mem1_out[receive-2] == 0x0d)
+					{
+						mem1_out[receive-2] = 0;
+					} 
+					else if (mem1_out[receive-1] == '\n')
+					{
+						mem1_out[receive-1] = 0;
+					}
+
+				//checking message character length 255 
+			  
+    			int charcount = strlen(message)-1;
+				if(charcount<257)
+				{
+					sprintf(out_message,"%s %s %s%s","MSG",cli->name,message,"\n");
+					printf("%s %s",cli->name,mem1_out);
+					fflush(stdout);
+					send_message(out_message, cli->uid);
+				}
+ 				else
+				{
+					sprintf(mem1, "ERROR %s handle , for character \n", cli->name);
+					send_message(mem1, cli->name);
+					//leave_flag = 1;	
+				} 
+
+			}
+		} 
+        else if (receive == 0)
+        {
+			//If a client leaves, the server has to update  person
+			sprintf(mem1, "%s left \n", cli->name);
+			printf("%s", mem1);
+			fflush(stdout);
+			
+			leave_flag = 1;
+		} 
+		//checking message on receive
+		else if (receive<0)
+		{
+			sprintf(mem1, "ERROR %s handle , for character, possible no message ---check\n", cli->name);
+			
+			leave_flag = 1;
+		}
+        else 
+        {
+			//checking error in the communication
+			printf("ERROR: -1\n");
+			fflush(stdout);
+			leave_flag = 1;
+		}
+		//clear memory
+		bzero(mem1,maxbuffersize);	
+	}
+
+  // when to remove clients from queues
+	close(cli->sockfd);
+	queue_remove(cli->uid);
+	free(cli);
+	cli_count--;
+	pthread_detach(pthread_self());
+	return NULL;
+}
+// main function 
+
+int main(int argc, char **argv)
+{
+	//check the CLI arguments 
+	if(argc != 2)
+	{
+		printf("ERROR Please enter ip and port in ths order  IP: port\n");
+		fflush(stdout);
+		exit(0);
+	}
+	//get the values from CLI
+	char delim[]=":";
+ 	char *Desthost=strtok(argv[1],delim);
+  	char *Destport=strtok(NULL,delim);
+	int port=atoi(Destport);
+	printf("Host %s, and port %d.\n",Desthost,port);
 	fflush(stdout);
-        return user.userName;
-  }
-printf("user not found");
-fflush(stdout);
-  return NULL;
-}
 
-
-void *get_in_addr(struct sockaddr *sa)
-{
-  if (sa->sa_family == AF_INET)
-  {
-    return &(((struct sockaddr_in *)sa)->sin_addr);
-  }
-
-  return &(((struct sockaddr_in6 *)sa)->sin6_addr);
-}
-
-void send_to_all(int j, int i, int sockfd, int nbytes_recvd, char *str, fd_set *master)
-{
-  nbytes_recvd = nbytes_recvd + 10;
-  if (FD_ISSET(j, master))
-  {
-    if (j != sockfd && j != i)
-    {
-      if (send(j, str, nbytes_recvd, 0) == -1)
-      {
-        perror("send");
-	fflush(stderr);
-      }
-    }
-  }
-}
-
-void send_recv(int i, fd_set *master, int sockfd, int fdmax, char *usr)
-{
-  int nbytes_recvd, j;
-  char recv_buf[BUFSIZE], buf[BUFSIZE];
-  char str[2024];
-
-  memset(recv_buf, 0, sizeof(recv_buf));
-  if ((nbytes_recvd = recv(i, recv_buf, BUFSIZE, 0)) <= 0)
-  {
-    if (nbytes_recvd == 0)
-    {
-      printf("socket %d hung up\n", i);
-      fflush(stdout);
-    }
-    else
-    {
-      perror("recv");
-      fflush(stderr);
-    }
-    close(i);
-    FD_CLR(i, master);
-  }
-  else
-  {
-   printf("the I is  %d\n",i);
-   fflush(stdout);
-
-printf("the USR0 %s\n",chatUsers[0].userName);
-printf("the USR1 %s\n",chatUsers[1].userName);
-printf("the USR2 %s\n",chatUsers[2].userName);
-fflush(stdout);
-
-   char respo[20] ={0};
+	// assign IP, PORT
+	struct addrinfo hints;
+	memset(&hints,0,sizeof(hints));
+	hints.ai_family=AF_UNSPEC;
+	hints.ai_socktype=SOCK_STREAM;
+	hints.ai_protocol=0;
+	hints.ai_flags=AI_ADDRCONFIG;
+	struct addrinfo* res=0;
+	int err=getaddrinfo(Desthost,Destport,&hints,&res);
+	if (err!=0) 
+	{
+    		perror("ERROR Failed to resolve remote socket address\n");
+			fflush(stderr);
+    		exit(0);
+	}
+	//Initializing variables
+	int sockfd;
+	int option = 1;
+	pthread_t tid;
+	int connfd = 0;
+	struct sockaddr_in serv_addr;
+	struct sockaddr_in cli_addr;
+	char name[12]={0};
   
-    printf("%s\n", recv_buf);
-    fflush(stdout);
-    for (j = 0; j <= fdmax; j++)
-    {
-      send_to_all(j, i, sockfd, nbytes_recvd, recv_buf, master);
-    }
-  }
-}
+	// socket creation and verification (server supports IPV4 and TCP only)
+	sockfd = socket(res->ai_family,res->ai_socktype,res->ai_protocol);
+	if(sockfd<=0)
+	{
+		printf("ERROR Server socket creation failed\n");
+		fflush(stdout);
+		exit(0);
+	}
+	else
+		printf("Socket successfully created\n");
+		fflush(stdout);
 
-int main(int argc, char *argv[])
-{
-  fd_set master;
-  fd_set read_fds;
-  int fdmax, i,k=0;
-  struct sockaddr_in my_addr;
-  struct sockaddr_in *client_addr;
-  struct sockaddr_in their_addr;
+	if(setsockopt(sockfd, SOL_SOCKET,(SO_REUSEPORT | SO_REUSEADDR),(char*)&option,sizeof(option)) < 0)
+	{
+		printf("ERROR setsockopt failed\n");
+		fflush(stdout);
+    	exit(0);
+	}
+	// Binding socket to server IP
+	if ((bind(sockfd, res->ai_addr,res->ai_addrlen)) != 0) 
+	{
+		printf("ERROR Server socket bind failed\n");
+		fflush(stdout);
+		exit(0);
+	}
+	else
+		printf("Socket successfully binded..\n");
+		fflush(stdout);
+	// server listening to a number of clients ===50
+	if ((listen(sockfd, 50)) != 0) 
+	{
+		printf("50 client allowed, please chceck..\n");
+		fflush(stdout);
+		exit(0);
+	}
+	else
+		printf("Server listening for incominf conncetion..\n");
+		fflush(stdout);
 
-  FD_ZERO(&master);
-  FD_ZERO(&read_fds);
+	freeaddrinfo(res);
+	printf("<<<<<<<WELCOME TO CHAT SYSTEM >>>>>>>\n");
+	fflush(stdout);
 
-  int connfd;
-  char recvBuff[1024];
-  char sendBuff[1024];
-  int sockfd; // listen on sock_fd, new connection on new_fd
-  struct addrinfo hints, *servinfo, *p;
-  socklen_t sin_size;
-  int yes = 1;
-  char s[INET6_ADDRSTRLEN];
-  int rv;
-  char const *reply = "ERROR\n";
-  // Check number of arguments
-  if (argc != 2)
-  {
-    fprintf(stderr, "usage: showip hostname\n");
-    fflush(stdout);
-    return 1;
-  }
+	while(1)
+	{
+		socklen_t clilen = sizeof(cli_addr);
+		connfd = accept(sockfd, (struct sockaddr*)&cli_addr, &clilen);
 
-  // Separating port and IP address
-  char delim[] = ":";
-  char *Desthost = strtok(argv[1], delim);
-  char *Destport = strtok(NULL, delim);
+		// Check if max clients is reached
+		if((cli_count + 1) == MAX_CLIENTS)
+		{
+			printf("ERROR, Rejected: cleint maxnumber reachead\n ");
+			fflush(stdout);
+			printf(":%d\n", cli_addr.sin_port);
+			fflush(stdout);
+			close(connfd);
+			continue;
+		}
+		//sending the version protocol
+		char Protocol[maxbuffersize]="HELLO 1\n";
+		if(send(connfd, Protocol, strlen(Protocol), 0)<=0)
+		{
+			printf("ERROR, WRONG PROTOCOL VERSION \n");
+			fflush(stdout);
+			exit(0);
+		}
+		
+		//NICK Name check
+		char NICKmessage[maxbuffersize]={0};
+		if(recv(connfd, NICKmessage, 32, 0) <= 0)
+	    {
+			printf("ERROR Receiving  NICK Name message\n");
+			fflush(stdout);
+			leave_flag = 1;
+		} 
+	    else
+	    {		
+			memcpy(name, NICKmessage+5,sizeof(NICKmessage));
+			name[strcspn(name, "\n")] = '\0';
+			#ifdef DEBUG
+			printf("NICK Name received:%s\n",name);
+			fflush(stdout);
+			#endif
 
-  /* Change string to int*/
-  int port = atoi(Destport);
-  printf("Host %s, and port %d.\n", Desthost, port);
-  fflush(stdout);
+			//checking the NICK name acceptance 
+			char *expression="^[A-Za-z0-9_]+$";
+			regex_t regularexpression;
+			int reti;
+			reti=regcomp(&regularexpression, expression,REG_EXTENDED);
+			if(reti)
+			{
+				printf("ERROR, Could not compile regex.\n");
+				fflush(stdout);
+				exit(0);
+			}
+			int matches;
+			regmatch_t items;
+		
+			if(strlen(name)<12)
+			{
+				reti=regexec(&regularexpression, name,matches,&items,0);
+				if(!reti)
+				{
+					//sending the OK to the client 
+					char OKmessage[12]="OK\n";
+					if(send(connfd, OKmessage, strlen(OKmessage),0)<=0)
+					{
+						printf("ERROR on sending OK message");
+						fflush(stdout);
+					}
+					else
+					{					
+						//adding new client to the list
+						client_t *cli = (client_t *)malloc(sizeof(client_t));
+						cli->address = cli_addr;
+						cli->sockfd = connfd;
+						cli->uid = uid++;
+						strcpy(cli->name, name);
+						printf("%s JOINED THE CHAT\n",cli->name);
+						fflush(stdout);
+						queue_add(cli);
+						pthread_create(&tid, NULL, &handle_client, (void*)cli);
+					}
+				} 
+				else 
+				{
+					//sending the ERROR to client when not allowed to the chat
+					char Errormessage[12]="error joining chat\n";
+					if(send(connfd, Errormessage, strlen(Errormessage),0)<=0)
+					{
+						printf("ERROR on sending NICK \n");
+						fflush(stdout);
+					}	
+				}
+			} 
+			else
+			{
+				// When there are more than 12
+				char Errormessage[12]="ERROR\n";
+				if(send(connfd, Errormessage, strlen(Errormessage),0)<=0)
+				{
+					printf("ERROR on sending NICK");
+					fflush(stdout);
+				}
+			}
+		}
+	}
 
-  memset(&hints, 0, sizeof hints);
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_flags = AI_PASSIVE; // use my IP
-
-  // Getting address information
-  if ((rv = getaddrinfo(Desthost, Destport, &hints, &servinfo)) != 0)
-  {
-    fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-    fflush(stdout);
-    return 1;
-  }
-
-
-  // loop through all the results and bind to the first we can
-  for (p = servinfo; p != NULL; p = p->ai_next)
-  {
-    if ((sockfd = socket(p->ai_family, p->ai_socktype,
-                         p->ai_protocol)) == -1)
-    {
-      perror("server: socket");
-      fflush(stderr);
-      continue;
-    }
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
-                   sizeof(int)) == -1)
-    {
-      perror("setsockopt");
-      fflush(stderr);
-      exit(1);
-    }
-    // Start binding
-    if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1)
-    {
-      close(sockfd);
-      perror("server: bind");
-      fflush(stderr);
-      exit(1);
-    }
-
-    break;
-  }
-
-  freeaddrinfo(servinfo); // all done with this structure
-
-  if (p == NULL)
-  {
-    fprintf(stderr, "server: failed to bind\n");
-    fflush(stdout);
-    exit(1);
-  }
-
-  // Start listening
-  if (listen(sockfd, 5) == -1)
-  {
-    perror("listen");
-    fflush(stderr);
-    close(sockfd);
-    exit(1);
-  }
-  printf("\nCHAT Server Waiting for client on port %d\n", port);
-  fflush(stdout);
-
-  FD_SET(sockfd, &master);
-
-  char usr[1024];
-  fdmax = sockfd;
-  while (1)
-  {
-    read_fds = master;
-    if (select(fdmax + 1, &read_fds, NULL, NULL, NULL) == -1)
-    {
-      perror("select");
-      fflush(stderr);
-      exit(4);
-    }
-
-    for (i = 0; i <= fdmax; i++)
-    {
-      if (FD_ISSET(i, &read_fds))
-      {
-        if (i == sockfd)
-        {
-
-          socklen_t addrlen;
-          int newsockfd, num;
-          char sendBuff[1024];
-          char recvBuff[1024];
-
-          sin_size = sizeof(their_addr);
-
-          addrlen = sizeof(struct sockaddr_in);
-          if ((newsockfd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size)) == -1)
-          {
-            perror("accept");
-	    fflush(stderr);
-            exit(1);
-          }
-          else
-          {
-
-            printf("new connection from %s on port %d \n", inet_ntoa(their_addr.sin_addr), ntohs(their_addr.sin_port));
-	    fflush(stdout);
-
-            memset(sendBuff, 0, sizeof(sendBuff));
-            // Sending supported protocol
-            strcpy(sendBuff, "HELLO 1\n");
-            // Send Hello to client
-            if (send(newsockfd, sendBuff, strlen(sendBuff), 0) < 0)
-            {
-              perror("send");
-	      fflush(stderr);
-              /* close socket */
-              exit(1);
-            }
-            // receive  Name from Client
-            memset(recvBuff, 0, sizeof(recvBuff));
-            if (recv(newsockfd, recvBuff, sizeof(recvBuff), 0) < 0)
-            {
-              perror("recv");
-	      fflush(stderr);
-              /* closing socket */
-              exit(1);
-            }
-
-            snprintf(usr, sizeof(usr), "%s", recvBuff);
-
-            char delim[] = "  ";
-            char *nick = strtok(usr, delim);
-            char *name = strtok(NULL, delim);
-
-            printf("%s new user  is comming , k=  %d\n", name, k);
-	    fflush(stdout);
-
-           chatUsers[k].userName = name ;
-           chatUsers[k].socketNo = newsockfd;
-           chatUsers[k].port = ntohs(their_addr.sin_port);
-           chatUsers[k].removed = 0;
-           
-           printf("The username is %s %d %d %d\n ",chatUsers[k].userName, chatUsers[k].socketNo,chatUsers[k].port,k);
-	   fflush(stdout);
-	   k++;
-            memset(sendBuff, 0, sizeof(sendBuff));
-            strcpy(sendBuff, "OK\n");
-
-
-            if (send(newsockfd, sendBuff, strlen(sendBuff), 0) < 0)
-            {
-              perror("send");
-	      fflush(stderr);
-              /* close socket */
-              exit(1);
-            }
-
-            FD_SET(newsockfd, &master);
-            if (newsockfd > fdmax)
-            {
-              fdmax = newsockfd;
-            }
-          }
-
-
-        }
-        else
-        {
-          // 
-          send_recv(i, &master, sockfd, fdmax, usr);
-        }
-      }
-    }
-  }
-  return 0;
+	return 0;
 }
