@@ -81,6 +81,7 @@ void send_to_all(int j, int i, int sockfd, int nbytes_recvd, char *str, fd_set *
       if (send(j, str, nbytes_recvd, 0) == -1)
       {
         perror("send");
+	fflush(stderr);
       }
     }
   }
@@ -103,6 +104,7 @@ void send_recv(int i, fd_set *master, int sockfd, int fdmax, char *usr)
     else
     {
       perror("recv");
+      fflush(stderr);
     }
     close(i);
     FD_CLR(i, master);
@@ -189,12 +191,14 @@ int main(int argc, char *argv[])
                          p->ai_protocol)) == -1)
     {
       perror("server: socket");
+      fflush(stderr);
       continue;
     }
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
                    sizeof(int)) == -1)
     {
       perror("setsockopt");
+      fflush(stderr);
       exit(1);
     }
     // Start binding
@@ -202,6 +206,7 @@ int main(int argc, char *argv[])
     {
       close(sockfd);
       perror("server: bind");
+      fflush(stderr);
       exit(1);
     }
 
@@ -221,6 +226,7 @@ int main(int argc, char *argv[])
   if (listen(sockfd, 5) == -1)
   {
     perror("listen");
+    fflush(stderr);
     close(sockfd);
     exit(1);
   }
@@ -237,6 +243,7 @@ int main(int argc, char *argv[])
     if (select(fdmax + 1, &read_fds, NULL, NULL, NULL) == -1)
     {
       perror("select");
+      fflush(stderr);
       exit(4);
     }
 
@@ -258,6 +265,7 @@ int main(int argc, char *argv[])
           if ((newsockfd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size)) == -1)
           {
             perror("accept");
+	    fflush(stderr);
             exit(1);
           }
           else
@@ -273,6 +281,7 @@ int main(int argc, char *argv[])
             if (send(newsockfd, sendBuff, strlen(sendBuff), 0) < 0)
             {
               perror("send");
+	      fflush(stderr);
               /* close socket */
               exit(1);
             }
@@ -281,6 +290,7 @@ int main(int argc, char *argv[])
             if (recv(newsockfd, recvBuff, sizeof(recvBuff), 0) < 0)
             {
               perror("recv");
+	      fflush(stderr);
               /* closing socket */
               exit(1);
             }
@@ -309,6 +319,7 @@ int main(int argc, char *argv[])
             if (send(newsockfd, sendBuff, strlen(sendBuff), 0) < 0)
             {
               perror("send");
+	      fflush(stderr);
               /* close socket */
               exit(1);
             }
