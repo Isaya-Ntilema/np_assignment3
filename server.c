@@ -69,7 +69,7 @@ void queue_remove(int uid)
 	pthread_mutex_unlock(&clients_mutex);
 }
 
-//How to send messages to all clients, expect oneself
+//How to send messages to all clients
 void send_message(char *s, int uid)
 {
 	pthread_mutex_lock(&clients_mutex);
